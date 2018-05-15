@@ -172,6 +172,7 @@ class AirplaneSystem(VectorSystem):
             v = X[2 * N + 1:3 * N + 1]  # cut last item if dirtrans
             #             return dt * (50 * u0.dot(u0) + 10 * u1.dot(u1)) + X[0]
             return dt * (1.0 * u0.dot(u0) + 1.0 * u1.dot(u1)) + 1.0 * X[0] * (u0.dot(v))
+            # return dt * (1.0 * u0.dot(u0) + 1.0 * u1.dot(u1) + 10.0 * X[0] * (u0.dot(v)))
 
         #             return 0.5*X[0]*(u0.dot(v))
 
@@ -338,6 +339,182 @@ class AirplaneSystem(VectorSystem):
         self.xdtraj_poly = PiecewisePolynomial.Cubic(time_array, state_trajectory_approx.T)
 
         return input_trajectory, state_trajectory_approx, time_array
+
+    def trajOptRRT(self, state_initial, state_final, goal=False):
+        # TODO: reconcile trajOpt and trajOptRRT (shouldn't take long)
+
+        # stopwatch for solver time
+        tsolve_pre = time.time()
+
+        #         (x_goal, V_goal, gamma_goal, q_goal) = (200.0, state_initial[2], 0.0, 0.0)
+
+        # time intervals for optimization discretization
+        N = int(max([np.floor(0.8 * np.abs(state_final[0] - state_initial[0])), 6]))
+
+        # optimization problem: variables t_f, u[k], x[k]
+        mp = MathematicalProgram()
+
+        t_f = mp.NewContinuousVariables(1, "t_f")
+
+        k = 0
+        u = mp.NewContinuousVariables(2, "u_%d" % k)
+        input_trajectory = u
+
+        x = mp.NewContinuousVariables(6, "x_%d" % k)
+        state_trajectory = x
+
+        for k in range(1, N):
+            u = mp.NewContinuousVariables(2, "u_%d" % k)
+            x = mp.NewContinuousVariables(6, "x_%d" % k)
+            input_trajectory = np.vstack((input_trajectory, u))
+            state_trajectory = np.vstack((state_trajectory, x))
+
+        x = mp.NewContinuousVariables(6, "x_%d" % N)
+        state_trajectory = np.vstack((state_trajectory, x))
+
+        print "Number of decision vars", mp.num_vars()
+
+        # cost function: penalize time and control effort
+        thrust = input_trajectory[:, 0]
+        elev = input_trajectory[:, 1]
+        vel = state_trajectory[:, 2]
+        allvars = np.hstack((t_f[0], thrust, elev, vel))
+
+        # TODO: use u of length n+1 for dircol
+        def totalcost(X):
+            dt = X[0] / N
+            u0 = X[1:N + 1]
+            u1 = X[N + 1:2 * N + 1]
+            v = X[2 * N + 1:3 * N + 1]  # cut last item if dirtrans
+            #             return dt * (50 * u0.dot(u0) + 10 * u1.dot(u1)) + X[0]
+            return dt * (1.0 * u0.dot(u0) + 1.0 * u1.dot(u1)) + 1.0 * X[0] * (u0.dot(v))
+
+        #             return 0.5*X[0]*(u0.dot(v))
+
+        mp.AddCost(totalcost, allvars)
+
+        # initial state constraint
+        for i in range(len(state_initial)):
+            mp.AddLinearConstraint(state_trajectory[0, i] == state_initial[i])
+
+        if goal:
+            # final state constraint (x position)
+            mp.AddLinearConstraint(state_trajectory[-1, 0] == state_final[0])
+
+            # final state constraint (z position) NOTE: range is acceptable
+            mp.AddLinearConstraint(state_trajectory[-1, 1] <= 1.5)
+            mp.AddLinearConstraint(state_trajectory[-1, 1] >= 0.5)
+
+            # final state constraint (velocity) NOTE: range is acceptable
+            mp.AddLinearConstraint(state_trajectory[-1, 2] <= 1.5 * state_final[2])
+            mp.AddLinearConstraint(state_trajectory[-1, 2] >= state_final[2])
+
+            # final state constraint (flight path angle) NOTE: small range here
+            mp.AddLinearConstraint(state_trajectory[-1, 3] <= state_final[3] + 1.0 * np.pi / 180.0)
+            mp.AddLinearConstraint(state_trajectory[-1, 3] >= state_final[3] - 1.0 * np.pi / 180.0)
+
+            # final state constraint (pitch rate)
+            mp.AddLinearConstraint(state_trajectory[-1, 5] == state_final[5])
+
+        else:
+            for i in range(len(state_initial)):
+                mp.AddLinearConstraint(state_trajectory[-1, i] == state_final[i])
+
+        # input constraints
+        for i in range(len(input_trajectory[:, 0])):
+            mp.AddLinearConstraint(input_trajectory[i, 0] >= 0.0)
+            mp.AddLinearConstraint(input_trajectory[i, 0] <= 1.2 * self.m * self.g)
+            mp.AddLinearConstraint(input_trajectory[i, 1] >= -30.0)
+            mp.AddLinearConstraint(input_trajectory[i, 1] <= 30.0)
+
+        # state constraints
+        for i in range(len(state_trajectory[:, 0])):
+            # x position
+            mp.AddLinearConstraint(state_trajectory[i, 0] >= state_initial[0])
+            mp.AddLinearConstraint(state_trajectory[i, 0] <= state_final[0])
+            # z position
+            mp.AddLinearConstraint(state_trajectory[i, 1] >= 0.3)
+            mp.AddLinearConstraint(state_trajectory[i, 1] <= 2.0)
+            # velocity
+            mp.AddLinearConstraint(state_trajectory[i, 2] >= 2.0)
+            mp.AddLinearConstraint(state_trajectory[i, 2] <= 18.0)
+            # flight path angle
+            mp.AddLinearConstraint(state_trajectory[i, 3] >= -30.0 * np.pi / 180.0)
+            mp.AddLinearConstraint(state_trajectory[i, 3] <= 30.0 * np.pi / 180.0)
+            # pitch angle
+            mp.AddLinearConstraint(state_trajectory[i, 4] >= -20.0 * np.pi / 180.0)
+            mp.AddLinearConstraint(state_trajectory[i, 4] <= 40.0 * np.pi / 180.0)
+            # pitch rate
+            mp.AddLinearConstraint(state_trajectory[i, 5] >= -20.0 * np.pi / 180.0)
+            mp.AddLinearConstraint(state_trajectory[i, 5] <= 20.0 * np.pi / 180.0)
+
+        # dynamic constraints
+        dt = t_f[0] / N
+        # direct transcription
+        for j in range(1, N + 1):
+            #                 dt = time_array[j] - time_array[j-1]
+            dynamic_prop = dt * self.airplaneLongDynamics(state_trajectory[j - 1, :], input_trajectory[j - 1, :])
+            for k in range(len(state_initial)):
+                mp.AddConstraint(state_trajectory[j, k] == state_trajectory[j - 1, k] + dynamic_prop[k])
+
+        # initial guesses
+        t_guess = (state_final[0] - state_initial[0]) / (0.5 * (state_final[2] + state_initial[2]))
+        mp.SetInitialGuess(t_f[0], t_guess)
+
+        if goal:
+            state_final_dummy = np.array(state_final)
+            state_final_dummy[1] = state_initial[1]
+            state_final_dummy[4] = state_initial[4]
+            for i in range(len(state_trajectory[:, 0])):
+                state_guess = ((N - i) / N) * state_initial + (i / N) * state_final_dummy
+                for j in range(len(state_guess)):
+                    mp.SetInitialGuess(state_trajectory[i, j], state_guess[j])
+        else:
+            for i in range(len(state_trajectory[:, 0])):
+                state_guess = ((N - i) / N) * state_initial + (i / N) * state_final
+                for j in range(len(state_guess)):
+                    mp.SetInitialGuess(state_trajectory[i, j], state_guess[j])
+
+        for i in range(N):
+            mp.SetInitialGuess(input_trajectory[i, 0], self.m * self.g / 3.5)
+            mp.SetInitialGuess(input_trajectory[i, 1], 0.01)
+
+        # time constraints
+        mp.AddLinearConstraint(t_f[0] <= 2.0 * t_guess)
+        mp.AddLinearConstraint(t_f[0] >= 0.5 * t_guess)
+
+        it_limit = int(max(20000, 40 * mp.num_vars()))
+        mp.SetSolverOption(SolverType.kSnopt, 'Iterations limit', it_limit)
+
+        print("** solver begin with N = %d **" % N)
+        # solve nonlinear optimization problem (w/SNOPT)
+        result = mp.Solve()
+        print result
+        #         assert(result == SolutionResult.kSolutionFound)
+
+        # convert from symbolic to float
+        utraj = mp.GetSolution(input_trajectory)
+        t_f = mp.GetSolution(t_f)
+        xtraj = mp.GetSolution(state_trajectory)
+        ttraj = t_f[0] * np.linspace(0.0, 1.0, (N + 1))
+
+        tsolve_post = time.time()
+        tsolve = tsolve_post - tsolve_pre
+
+        solver_id = mp.GetSolverId()
+
+        print ("** %s solver finished in %.1f seconds **\n" % (solver_id.name(), tsolve))
+        print ("t_f computed: %.3f seconds" % t_f[0])
+
+        # get total cost of solution
+        if result == SolutionResult.kSolutionFound:
+            thrust = utraj[:, 0]
+            elev = utraj[:, 1]
+            vel = xtraj[:, 2]
+            allvars = np.hstack((t_f[0], thrust, elev, vel))
+            print ("cost computed: %.3f" % totalcost(allvars))
+
+        return utraj, xtraj, ttraj, result
 
     def calcTvlqrStabilization(self):
         if self.mp_result != SolutionResult.kSolutionFound:

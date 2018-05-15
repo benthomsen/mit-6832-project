@@ -1,8 +1,7 @@
 from scipy.integrate import odeint
 import numpy as np
 from matplotlib import pyplot as plt
-from matplotlib.patches import Ellipse
-from matplotlib.animation import FuncAnimation
+from matplotlib.patches import Ellipse, Rectangle
 
 from pydrake.multibody.rigid_body_tree import  RigidBodyTree
 from pydrake.multibody.rigid_body_tree import FloatingBaseType
@@ -52,7 +51,7 @@ def simTvlqrStabilization(plant, state_initial, time_array, uncertainty=False):
     return states_over_time, u_over_time
 
 
-def simAndCompare(plant, x0):
+def simAndCompare(plant, x0, obs=None, goalnode=None, compare=True):
     # simulate dynamics at finer time discretization
     input_lookup = np.vectorize(plant.udtraj_poly.value)
 
@@ -67,83 +66,191 @@ def simAndCompare(plant, x0):
     xtraj_fine, utraj_fine_stab = simTvlqrStabilization(plant, x0, times_fine, uncertainty=True)
     print "finer dynamics simulated"
 
-    plt.figure(figsize=(12,2.5))
-    plt.plot(plant.xdtraj[:,0] - plant.xdtraj[:,0].max(), plant.xdtraj[:,1], 'ro',
-             xtraj_fine[:,0] - plant.xdtraj[:,0].max(), xtraj_fine[:,1], 'b')
-    plt.title('trajectory in x-z plane')
-    plt.xlabel('x [m]')
-    plt.ylabel('z [m]')
-    plt.legend(('optimal', 'stabilized'))
-    plt.tight_layout()
-    plt.show()
+    if compare:
+        fig, ax = plt.subplots(figsize=(12, 2.5))
+        plt.plot(plant.xdtraj[:, 0] - plant.xdtraj[:, 0].max(), plant.xdtraj[:, 1], 'o', mfc='orange')
+        plt.plot(
+                 xtraj_fine_nostab_nouncert[:, 0] - plant.xdtraj[:, 0].max(), xtraj_fine_nostab_nouncert[:, 1], 'k',
+                 xtraj_fine_nostab[:, 0] - plant.xdtraj[:, 0].max(), xtraj_fine_nostab[:, 1], 'g',
+                 xtraj_fine[:, 0] - plant.xdtraj[:, 0].max(), xtraj_fine[:, 1], 'b', linewidth=2)
+        plt.title('trajectory in x-z plane')
+        plt.xlabel('x [m]')
+        plt.ylabel('z [m]')
+        plt.xlim((plant.xdtraj[:, 0].min() - 1 - plant.xdtraj[:, 0].max(), plant.xdtraj[:, 0].max() + 1 - plant.xdtraj[:, 0].max()))
+        plt.ylim((0, 2))
+        if obs is not None:
+            for ob in obs:
+                ax.add_patch(Rectangle((ob[0], ob[1]), ob[2], ob[3], color='orange', alpha=0.5))
+            plt.legend(('(piecewise) optimal', 'unstabilized (no uncert.)', 'unstabilized', 'stabilized'), loc='best')
+            # plt.legend(('(piecewise) optimal', 'stabilized'), loc='best')
+        else:
+            plt.legend(('optimal', 'unstabilized (no uncert.)', 'unstabilized', 'stabilized'), loc='best')
+        if goalnode is not None:
+            plt.plot(plant.xdtraj[-1, 0], plant.xdtraj[-1, 1], 'gp', ms=16, alpha=0.5)
+            goalnode = goalnode.parent
+            while goalnode.parent is not None:
+                plt.plot(goalnode.state[0], goalnode.state[1], 'gp', ms=16, alpha=0.5)
+                goalnode = goalnode.parent
+        plt.tight_layout()
+        # plt.savefig('figs/stab_traj_fig1.png', dpi=300)
+        plt.show()
 
-    plt.figure(figsize=(12, 7))
-    plt.subplot(321)
-    plt.plot(plant.ttraj, plant.xdtraj[:,0] - plant.xdtraj[:,0].max(), 'ro',
-             times_fine, xtraj_fine_nostab_nouncert[:,0] - plant.xdtraj[:,0].max(), 'k',
-             times_fine, xtraj_fine_nostab[:,0] - plant.xdtraj[:,0].max(), 'g',
-             times_fine, xtraj_fine[:,0] - plant.xdtraj[:,0].max(), 'b')
-    plt.title('x-position')
-    plt.ylabel('x [m]')
+        plt.figure(figsize=(10, 7))
+        plt.subplot(321)
+        plt.plot(plant.ttraj, plant.xdtraj[:,0] - plant.xdtraj[:,0].max(), 'o', mfc='orange')
+        plt.plot(times_fine, xtraj_fine_nostab_nouncert[:,0] - plant.xdtraj[:,0].max(), 'k',
+                 times_fine, xtraj_fine_nostab[:,0] - plant.xdtraj[:,0].max(), 'g',
+                 times_fine, xtraj_fine[:,0] - plant.xdtraj[:,0].max(), 'b')
+        plt.title('x-position')
+        plt.ylabel('x [m]')
 
-    plt.subplot(322)
-    plt.plot(plant.ttraj, plant.xdtraj[:,1], 'ro',
-             times_fine, xtraj_fine_nostab_nouncert[:,1], 'k',
-             times_fine, xtraj_fine_nostab[:,1], 'g',
-             times_fine, xtraj_fine[:,1], 'b')
-    plt.title('z-position')
-    plt.ylabel('z [m]')
+        plt.subplot(322)
+        plt.plot(plant.ttraj, plant.xdtraj[:,1], 'o', mfc='orange')
+        plt.plot(times_fine, xtraj_fine_nostab_nouncert[:,1], 'k',
+                 times_fine, xtraj_fine_nostab[:,1], 'g',
+                 times_fine, xtraj_fine[:,1], 'b')
+        plt.title('z-position')
+        plt.ylabel('z [m]')
 
-    plt.subplot(323)
-    plt.plot(plant.ttraj, plant.xdtraj[:,2], 'ro',
-             times_fine, xtraj_fine_nostab_nouncert[:,2], 'k',
-             times_fine, xtraj_fine_nostab[:,2], 'g',
-             times_fine, xtraj_fine[:,2], 'b')
-    plt.title('velocity')
-    plt.ylabel('V [m/s]')
+        plt.subplot(323)
+        plt.plot(plant.ttraj, plant.xdtraj[:,2], 'o', mfc='orange')
+        plt.plot(times_fine, xtraj_fine_nostab_nouncert[:,2], 'k',
+                 times_fine, xtraj_fine_nostab[:,2], 'g',
+                 times_fine, xtraj_fine[:,2], 'b')
+        plt.title('velocity')
+        plt.ylabel('V [m/s]')
 
-    plt.subplot(324)
-    plt.plot(plant.ttraj, plant.xdtraj[:,3]*180/np.pi, 'ro',
-             times_fine, xtraj_fine_nostab_nouncert[:,3]*180/np.pi, 'k',
-             times_fine, xtraj_fine_nostab[:,3]*180/np.pi, 'g',
-             times_fine, xtraj_fine[:,3]*180/np.pi, 'b')
-    plt.title('flight path angle')
-    plt.ylabel('gamma [deg]')
+        plt.subplot(324)
+        plt.plot(plant.ttraj, plant.xdtraj[:,3]*180/np.pi, 'o', mfc='orange')
+        plt.plot(times_fine, xtraj_fine_nostab_nouncert[:,3]*180/np.pi, 'k',
+                 times_fine, xtraj_fine_nostab[:,3]*180/np.pi, 'g',
+                 times_fine, xtraj_fine[:,3]*180/np.pi, 'b')
+        plt.title('flight path angle')
+        plt.ylabel('gamma [deg]')
 
-    plt.subplot(325)
-    plt.plot(plant.ttraj, plant.xdtraj[:,4]*180/np.pi, 'ro',
-             times_fine, xtraj_fine_nostab_nouncert[:,4]*180/np.pi, 'k',
-             times_fine, xtraj_fine_nostab[:,4]*180/np.pi, 'g',
-              times_fine, xtraj_fine[:,4]*180/np.pi, 'b')
-    plt.title('pitch angle')
-    plt.ylabel('theta [deg]')
+        plt.subplot(325)
+        plt.plot(plant.ttraj, plant.xdtraj[:,4]*180/np.pi, 'o', mfc='orange')
+        plt.plot(times_fine, xtraj_fine_nostab_nouncert[:,4]*180/np.pi, 'k',
+                 times_fine, xtraj_fine_nostab[:,4]*180/np.pi, 'g',
+                  times_fine, xtraj_fine[:,4]*180/np.pi, 'b')
+        plt.title('pitch angle')
+        plt.ylabel('theta [deg]')
 
-    plt.subplot(326)
-    plt.plot(plant.ttraj, plant.xdtraj[:,5]*180/np.pi, 'ro',
-             times_fine, xtraj_fine_nostab_nouncert[:,5]*180/np.pi, 'k',
-             times_fine, xtraj_fine_nostab[:,5]*180/np.pi, 'g',
-             times_fine, xtraj_fine[:,5]*180/np.pi, 'b')
-    plt.title('pitch rate')
-    plt.ylabel('q [deg/s]')
+        plt.subplot(326)
+        plt.plot(plant.ttraj, plant.xdtraj[:,5]*180/np.pi, 'o', mfc='orange')
+        plt.plot(times_fine, xtraj_fine_nostab_nouncert[:,5]*180/np.pi, 'k',
+                 times_fine, xtraj_fine_nostab[:,5]*180/np.pi, 'g',
+                 times_fine, xtraj_fine[:,5]*180/np.pi, 'b')
+        plt.title('pitch rate')
+        plt.ylabel('q [deg/s]')
 
-    plt.tight_layout()
-    plt.show()
+        plt.tight_layout()
+        # plt.savefig('figs/stab_state_fig1.png', dpi=300)
+        plt.show()
 
-    # NOTE this version doesn't have right slice for dircol
-    plt.figure(figsize=(12,2.5))
-    plt.subplot(121)
-    plt.plot(plant.ttraj[0:-1], plant.udtraj[:,0], 'ro',
-             times_fine, utraj_fine[:,0], 'g',
-             times_fine[0:-1], utraj_fine_stab[:,0], 'b')
-    plt.title('thrust')
-    plt.ylabel('thrust [N]')
+        # NOTE this version doesn't have right slice for dircol
+        plt.figure(figsize=(10,2.5))
+        plt.subplot(121)
+        plt.plot(plant.ttraj[0:-1], plant.udtraj[:,0], 'o', mfc='orange')
+        plt.plot(times_fine, utraj_fine[:,0], 'g',
+                 times_fine[0:-1], utraj_fine_stab[:,0], 'b')
+        plt.title('thrust')
+        plt.ylabel('thrust [N]')
 
-    plt.subplot(122)
-    plt.plot(plant.ttraj[0:-1], plant.udtraj[:,1], 'ro',
-             times_fine, utraj_fine[:,1], 'g',
-             times_fine[0:-1], utraj_fine_stab[:,1], 'b')
-    plt.title('elevator')
-    plt.ylabel('elevator [deg]')
+        plt.subplot(122)
+        plt.plot(plant.ttraj[0:-1], plant.udtraj[:,1], 'o', mfc='orange')
+        plt.plot(times_fine, utraj_fine[:,1], 'g',
+                 times_fine[0:-1], utraj_fine_stab[:,1], 'b')
+        plt.title('elevator')
+        plt.ylabel('elevator [deg]')
+        plt.tight_layout()
+        # plt.savefig('figs/stab_inp_fig1.png', dpi=300)
+
+    else:
+        fig, ax = plt.subplots(figsize=(12, 2.5))
+        plt.plot(plant.xdtraj[:, 0] - plant.xdtraj[:, 0].max(), plant.xdtraj[:, 1], 'ro',
+                 xtraj_fine_nostab_nouncert[:, 0] - plant.xdtraj[:, 0].max(), xtraj_fine_nostab_nouncert[:, 1], 'k',
+                 xtraj_fine_nostab[:, 0] - plant.xdtraj[:, 0].max(), xtraj_fine_nostab[:, 1], 'g')
+        plt.title('trajectory in x-z plane')
+        plt.xlabel('x [m]')
+        plt.ylabel('z [m]')
+        plt.xlim((plant.xdtraj[:, 0].min() - 1 - plant.xdtraj[:, 0].max(), plant.xdtraj[:, 0].max() + 1 - plant.xdtraj[:, 0].max()))
+        plt.ylim((0, 2))
+        if obs is not None:
+            for ob in obs:
+                ax.add_patch(Rectangle((ob[0], ob[1]), ob[2], ob[3], color='orange', alpha=0.5))
+            plt.legend(('(piecewise) optimal', 'unstabilized (no uncert.)', 'unstabilized'), loc='best')
+        else:
+            plt.legend(('optimal', 'unstabilized (no uncert.)', 'unstabilized'), loc='best')
+        if goalnode is not None:
+            plt.plot(plant.xdtraj[-1, 0], plant.xdtraj[-1, 1], 'gp', ms=16)
+            goalnode = goalnode.parent
+            while goalnode.parent is not None:
+                plt.plot(goalnode.state[0], goalnode.state[1], 'gp', ms=16)
+                goalnode = goalnode.parent
+        plt.tight_layout()
+        plt.show()
+
+        plt.figure(figsize=(12, 7))
+        plt.subplot(321)
+        plt.plot(plant.ttraj, plant.xdtraj[:, 0] - plant.xdtraj[:, 0].max(), 'ro',
+                 times_fine, xtraj_fine_nostab_nouncert[:, 0] - plant.xdtraj[:, 0].max(), 'k',
+                 times_fine, xtraj_fine_nostab[:, 0] - plant.xdtraj[:, 0].max(), 'g')
+        plt.title('x-position')
+        plt.ylabel('x [m]')
+
+        plt.subplot(322)
+        plt.plot(plant.ttraj, plant.xdtraj[:, 1], 'ro',
+                 times_fine, xtraj_fine_nostab_nouncert[:, 1], 'k',
+                 times_fine, xtraj_fine_nostab[:, 1], 'g')
+        plt.title('z-position')
+        plt.ylabel('z [m]')
+
+        plt.subplot(323)
+        plt.plot(plant.ttraj, plant.xdtraj[:, 2], 'ro',
+                 times_fine, xtraj_fine_nostab_nouncert[:, 2], 'k',
+                 times_fine, xtraj_fine_nostab[:, 2], 'g')
+        plt.title('velocity')
+        plt.ylabel('V [m/s]')
+
+        plt.subplot(324)
+        plt.plot(plant.ttraj, plant.xdtraj[:, 3] * 180 / np.pi, 'ro',
+                 times_fine, xtraj_fine_nostab_nouncert[:, 3] * 180 / np.pi, 'k',
+                 times_fine, xtraj_fine_nostab[:, 3] * 180 / np.pi, 'g')
+        plt.title('flight path angle')
+        plt.ylabel('gamma [deg]')
+
+        plt.subplot(325)
+        plt.plot(plant.ttraj, plant.xdtraj[:, 4] * 180 / np.pi, 'ro',
+                 times_fine, xtraj_fine_nostab_nouncert[:, 4] * 180 / np.pi, 'k',
+                 times_fine, xtraj_fine_nostab[:, 4] * 180 / np.pi, 'g')
+        plt.title('pitch angle')
+        plt.ylabel('theta [deg]')
+
+        plt.subplot(326)
+        plt.plot(plant.ttraj, plant.xdtraj[:, 5] * 180 / np.pi, 'ro',
+                 times_fine, xtraj_fine_nostab_nouncert[:, 5] * 180 / np.pi, 'k',
+                 times_fine, xtraj_fine_nostab[:, 5] * 180 / np.pi, 'g')
+        plt.title('pitch rate')
+        plt.ylabel('q [deg/s]')
+
+        plt.tight_layout()
+        plt.show()
+
+        # NOTE this version doesn't have right slice for dircol
+        plt.figure(figsize=(12, 2.5))
+        plt.subplot(121)
+        plt.plot(plant.ttraj[0:-1], plant.udtraj[:, 0], 'ro',
+                 times_fine, utraj_fine[:, 0], 'g')
+        plt.title('thrust')
+        plt.ylabel('thrust [N]')
+
+        plt.subplot(122)
+        plt.plot(plant.ttraj[0:-1], plant.udtraj[:, 1], 'ro',
+                 times_fine, utraj_fine[:, 1], 'g')
+        plt.title('elevator')
+        plt.ylabel('elevator [deg]')
+        plt.tight_layout()
     return plt
 
 
@@ -154,7 +261,7 @@ def plotTrajFunnel(plant, rho, knots):
     ax = fig.add_subplot(1, 1, 1)
 
     # plt.plot(x0[knots, 0], x0[knots, 1], c='r')
-    plt.plot(x0[:, 0], x0[:, 1], c='r')
+    plt.plot(x0[:, 0], x0[:, 1], c='r', linewidth=2)
 
     rz = np.zeros_like(rho)
 
@@ -177,10 +284,10 @@ def plotTrajFunnel(plant, rho, knots):
             # print "Area of your region of attraction: ", np.pi * r1 * r2
             angle = np.arctan2(-axis_1[1], axis_1[0])
 
-            ax.add_patch(Ellipse((x0[knot, 0], x0[knot, 1]),
-                                 2 * r1, 2 * r2,
-                                 angle=angle * 180. / np.pi,
-                                 linewidth=2, fill=True, alpha=0.2, zorder=2))
+            # ax.add_patch(Ellipse((x0[knot, 0], x0[knot, 1]),
+            #                      2 * r1, 2 * r2,
+            #                      angle=angle * 180. / np.pi,
+            #                      linewidth=2, fill=True, alpha=0.2, zorder=2))
 
     ax.fill_between(x0[knots, 0], x0[knots, 1] - rz, x0[knots, 1] + rz, color='g', alpha=0.2)
 
@@ -193,15 +300,16 @@ def plotTrajFunnel(plant, rho, knots):
     xtraj_fine_nostab_nouncert = simWithoutStabilization(plant, x0[0,:], times_fine, uncertainty=False)
     xtraj_fine_nostab = simWithoutStabilization(plant, x0[0,:], times_fine, uncertainty=True)
     xtraj_fine, utraj_fine_stab = simTvlqrStabilization(plant, x0[0,:], times_fine, uncertainty=True)
-    plt.plot(xtraj_fine[:, 0], xtraj_fine[:, 1], c='b')
-    plt.plot(xtraj_fine_nostab[:, 0], xtraj_fine_nostab[:, 1], c='k')
-    plt.plot(xtraj_fine_nostab_nouncert[:, 0], xtraj_fine_nostab_nouncert[:, 1], c='g')
+    plt.plot(xtraj_fine[:, 0], xtraj_fine[:, 1], c='b', linewidth=2)
+    plt.plot(xtraj_fine_nostab[:, 0], xtraj_fine_nostab[:, 1], c='k', linewidth=2)
+    plt.plot(xtraj_fine_nostab_nouncert[:, 0], xtraj_fine_nostab_nouncert[:, 1], c='g', linewidth=2)
 
     plt.xlim(x0[:, 0].min() - 1, x0[:, 0].max() + 1)
-    plt.ylim(-0.5, 2)
-    plt.title("ROA in xz plane")
+    plt.ylim(0, 2)
+    plt.title("ROA estimation in xz plane")
     plt.xlabel("x")
     plt.ylabel("z")
+    plt.tight_layout()
     return plt
 
 
@@ -219,7 +327,7 @@ def getRho(plant, knots, uncertainty):
 
 
 def urdfViz(plant):
-    tree = RigidBodyTree(FindResource("/notebooks/ben_uav.urdf"),
+    tree = RigidBodyTree(FindResource("/notebooks/6832-code/ben_uav.urdf"),
                          FloatingBaseType.kRollPitchYaw)
 
     vis = PlanarRigidBodyVisualizer(tree, xlim=[-1, 15], ylim=[-0.5, 2.5])
@@ -230,7 +338,7 @@ def urdfViz(plant):
         x = plant.xdtraj_poly.value(t)
         u = plant.udtraj_poly.value(t)
         posn[0:6, i] = 0
-        posn[6, i] = x[0] / 14  # x
+        posn[6, i] = (x[0] - plant.xdtraj[:,0].min()) / 14  # x
         posn[7, i] = 0  # z
         posn[8, i] = x[1]  # y
         posn[9, i] = 0  # yz plane
@@ -299,7 +407,7 @@ def animateMultipleTraj(plants, saveprefix=None):
         #     cb.set_label('$V/V_{max}$')
         if saveprefix is not None:
             filename = (saveprefix + str(frame).zfill(3) + '.png')
-            plt.savefig(filename, dpi=200, bbox_inches="tight")
+            plt.savefig(filename, dpi=300, bbox_inches="tight")
 
         fig.canvas.draw()
 

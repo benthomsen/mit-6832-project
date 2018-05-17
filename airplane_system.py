@@ -354,7 +354,7 @@ class AirplaneSystem(VectorSystem):
 
         return input_trajectory, state_trajectory_approx, time_array
 
-    def trajOptRRT(self, state_initial, state_final, goal=False):
+    def trajOptRRT(self, state_initial, state_final, goal=False, verbose=False):
         """
         Perform trajectory optimization via direct transcription, for trajectory from state_initial to state_final.
         If goal=True, conditions are relaxed on convergence to state_final since overall goal is to reach goal region
@@ -391,7 +391,8 @@ class AirplaneSystem(VectorSystem):
         x = mp.NewContinuousVariables(6, "x_%d" % N)
         state_trajectory = np.vstack((state_trajectory, x))
 
-        print "Number of decision vars", mp.num_vars()
+        if verbose:
+            print "Number of decision vars", mp.num_vars()
 
         # cost function: penalize electric energy use and overall control effort
         thrust = input_trajectory[:, 0]
@@ -500,10 +501,12 @@ class AirplaneSystem(VectorSystem):
         it_limit = int(max(20000, 40 * mp.num_vars()))
         mp.SetSolverOption(SolverType.kSnopt, 'Iterations limit', it_limit)
 
-        print("** solver begin with N = %d **" % N)
+        if verbose:
+            print("** solver begin with N = %d **" % N)
         # solve nonlinear optimization problem (w/SNOPT)
         result = mp.Solve()
-        print result
+        if verbose:
+            print result
 
         # convert from symbolic to float
         utraj = mp.GetSolution(input_trajectory)
@@ -516,8 +519,9 @@ class AirplaneSystem(VectorSystem):
 
         solver_id = mp.GetSolverId()
 
-        print ("** %s solver finished in %.1f seconds **\n" % (solver_id.name(), tsolve))
-        print ("t_f computed: %.3f seconds" % t_f[0])
+        if verbose:
+            print ("** %s solver finished in %.1f seconds **\n" % (solver_id.name(), tsolve))
+            print ("t_f computed: %.3f seconds" % t_f[0])
 
         cost = -1
         # get total cost of solution
@@ -527,7 +531,8 @@ class AirplaneSystem(VectorSystem):
             vel = xtraj[:, 2]
             allvars = np.hstack((t_f[0], thrust, elev, vel))
             cost = totalcost(allvars)
-            print ("cost computed: %.3f" % cost)
+            if verbose:
+                print ("cost computed: %.3f" % cost)
 
         return utraj, xtraj, ttraj, result, cost
 

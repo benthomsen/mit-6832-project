@@ -250,14 +250,14 @@ class RRTStar(object):
         current = node
 
         utraj, xtraj, ttraj, res, cost= self.plant.trajOptRRT(current.parent.state, current.state,
-                                                              goal=current.goal_node)
+                                                              goal=current.goal_node, verbose=False)
         urrt = utraj
         xrrt = xtraj
         trrt = ttraj
         current = current.parent
         while current.parent is not None:
             utraj, xtraj, ttraj, res, cost = self.plant.trajOptRRT(current.parent.state, current.state,
-                                                                   goal=current.goal_node)
+                                                                   goal=current.goal_node, verbose=False)
             urrt = np.vstack((utraj, urrt))
             xrrt = np.vstack((xtraj[:-1, :], xrrt))
             trrt = np.hstack((ttraj[:-1], trrt + ttraj.max()))
@@ -272,7 +272,6 @@ class RRTStar(object):
         self.plant.udtraj_poly = PiecewisePolynomial.FirstOrderHold(trrt[0:-1], urrt.T)
         self.plant.xdtraj_poly = PiecewisePolynomial.Cubic(trrt, xrrt.T)
 
-        print '\n', 'total cost of RRT* path: ', self.sum_cost(self.best_goal_node)
         return urrt, xrrt, trrt
 
 

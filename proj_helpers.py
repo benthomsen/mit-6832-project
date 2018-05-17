@@ -496,6 +496,7 @@ def rrtPlot(rrt):
         plt.plot(leaf.state[0], leaf.state[1], 'o', mfc='orange')
 
     urrt, xrrt, trrt = rrt.reconstruct_path(rrt.best_goal_node)
+    print 'total cost of RRT* path: ', rrt.sum_cost(rrt.best_goal_node)
     plt.plot(rrt.best_goal_node.state[0], rrt.best_goal_node.state[1], 'gp', ms=16, alpha=0.5)
     current = rrt.best_goal_node.parent
     while current.parent is not None:
@@ -510,7 +511,7 @@ def rrtPlot(rrt):
     plt.xlabel('x [m]')
     plt.ylabel('z [m]')
     plt.tight_layout()
-    plt.savefig('figs/rrtstar_tree_2.png', dpi=300)
+    # plt.savefig('figs/rrtstar_tree_2.png', dpi=300)
     plt.show()
 
-    return plt
+    return ax

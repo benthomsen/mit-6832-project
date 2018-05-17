@@ -111,7 +111,7 @@ def simAndCompare(plant, x0, obs=None, goalnode=None, compare=True):
                 plt.plot(goalnode.state[0], goalnode.state[1], 'gp', ms=16, alpha=0.5)
                 goalnode = goalnode.parent
         plt.tight_layout()
-        # plt.savefig('figs/stab_traj_fig1.png', dpi=300)
+        # plt.savefig('figs/stab_traj_may16_1.png', dpi=300)
         plt.show()
 
         plt.figure(figsize=(10, 7))
@@ -166,7 +166,7 @@ def simAndCompare(plant, x0, obs=None, goalnode=None, compare=True):
         plt.ylabel('q [deg/s]')
 
         plt.tight_layout()
-        plt.savefig('figs/stab_state_fig2.png', dpi=300)
+        # plt.savefig('figs/stab_state_may16_1.png', dpi=300)
         plt.show()
 
         # NOTE this version doesn't have right slice for dircol
@@ -187,7 +187,8 @@ def simAndCompare(plant, x0, obs=None, goalnode=None, compare=True):
         plt.xlabel('time [s]')
         plt.ylabel('elevator [deg]')
         plt.tight_layout()
-        plt.savefig('figs/stab_inp_fig2.png', dpi=300)
+        # plt.savefig('figs/stab_inp_may16_1.png', dpi=300)
+        plt.show()
 
     else:
         fig, ax = plt.subplots(figsize=(12, 2.5))
@@ -274,6 +275,7 @@ def simAndCompare(plant, x0, obs=None, goalnode=None, compare=True):
         plt.title('elevator')
         plt.ylabel('elevator [deg]')
         plt.tight_layout()
+        plt.show()
     return plt
 
 
@@ -397,7 +399,7 @@ def urdfViz(plant):
     return vis.animate(test_poly, repeat=False)
 
 
-def plotMultipleTraj(plants):
+def plotMultipleTraj(plants, savefile=None):
     """
     Scatter plot of multiple trajectories, with color correlated to velocity at knot point.
     """
@@ -415,6 +417,9 @@ def plotMultipleTraj(plants):
     cb = plt.colorbar()
     cb.set_label('$V/V_{max}$')
     plt.tight_layout()
+    # save if a file name was provided
+    if savefile is not None:
+        plt.savefig(savefile, dpi=300, bbox_inches="tight")
     plt.show()
 
 
@@ -463,3 +468,49 @@ def animateMultipleTraj(plants, saveprefix=None):
 
         fig.canvas.draw()
 
+
+
+def rrtPlot(rrt):
+    """
+    This function plots the RRT* tree in the xz-plane, as well as the stabilized solution to the goal.
+    """
+    plant = rrt.plant
+
+    fig, ax = plt.subplots(figsize=(12, 3.2))
+
+    leaf_nodes = rrt.nodes[1:]
+    # trim non-leaf nodes
+    for node in rrt.nodes[1:]:
+        if node.parent is not None:
+            try:
+                leaf_nodes.remove(node.parent)
+            except ValueError:
+                pass
+
+    leaf_nodes.remove(rrt.best_goal_node)
+
+    print 'leaf_nodes length: ', len(leaf_nodes)
+    for leaf in leaf_nodes:
+        urrt, xrrt, trrt = rrt.reconstruct_path(leaf)
+        plt.plot(xrrt[:, 0], xrrt[:, 1], 'k')
+        plt.plot(leaf.state[0], leaf.state[1], 'o', mfc='orange')
+
+    urrt, xrrt, trrt = rrt.reconstruct_path(rrt.best_goal_node)
+    plt.plot(rrt.best_goal_node.state[0], rrt.best_goal_node.state[1], 'gp', ms=16, alpha=0.5)
+    current = rrt.best_goal_node.parent
+    while current.parent is not None:
+        plt.plot(current.state[0], current.state[1], 'gp', ms=16, alpha=0.5)
+        current = current.parent
+    plt.plot(xrrt[:, 0], xrrt[:, 1], 'g', linewidth=2)
+
+    if rrt.obs is not None:
+        for ob in rrt.obs:
+            ax.add_patch(Rectangle((ob[0], ob[1]), ob[2], ob[3], color='orange', alpha=0.5))
+    plt.title('RRT* tree')
+    plt.xlabel('x [m]')
+    plt.ylabel('z [m]')
+    plt.tight_layout()
+    plt.savefig('figs/rrtstar_tree_2.png', dpi=300)
+    plt.show()
+
+    return plt

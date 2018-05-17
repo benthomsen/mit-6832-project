@@ -22,7 +22,7 @@ class RRTStar(object):
         t_start = time.time()
 
         # number of iterations
-        N = 200
+        N = 300
 
         # root node
         start_node = Node(self.x0)
@@ -153,12 +153,40 @@ class RRTStar(object):
         forward_nodes = []
 
         for node in self.nodes:
-            if node.state[0] < (test_pt[0] - 3.0):
-                backward_nodes.append(node)
-                dists.append((node.state[0] - test_pt[0]) ** 2 + (node.state[1] - test_pt[1]) ** 2)
+            # euclidian distance between two points
+            euclid_dist = np.sqrt((node.state[0] - test_pt[0]) ** 2 + (node.state[1] - test_pt[1]) ** 2)
 
-            elif node.state[0] > (test_pt[0] + 3.0):
+            # angle to horizontal from node to test_pt
+            beta = np.arctan2((test_pt[1] - node.state[1]), (test_pt[0] - node.state[0]))
+
+            # flight path angle at node
+            gamma = node.state[3]
+
+            # check if test_pt is reasonably reachable from node
+            # angle between gamma and path to test_pt should be small, horizontal dist should be greater than 3m
+            if np.abs(beta-gamma) < (np.pi/6) and np.abs(node.state[0] - test_pt[0]) > 3.0:
+                backward_nodes.append(node)
+                # distance function
+                dist = euclid_dist * (np.cos(beta-gamma) + 5*np.sin(beta-gamma)**2)
+                dists.append(dist)
+
+            # if node.state[0] < (test_pt[0] - 3.0):
+            #     backward_nodes.append(node)
+            #     dists.append((node.state[0] - test_pt[0]) ** 2 + (node.state[1] - test_pt[1]) ** 2)
+
+            # angle to horizontal from test_pt to node
+            beta2 = np.pi + beta
+
+            # flight path angle at test_pt
+            gamma2 = test_pt[3]
+
+            # check if node is reasonably reachable from test_pt
+            # angle between gamma and path to node should be small, horizontal dist should be greater than 3m
+            if np.abs(beta2-gamma2) < (np.pi/6) and np.abs(node.state[0] - test_pt[0]) > 3.0:
                 forward_nodes.append(node)
+
+            # elif node.state[0] > (test_pt[0] + 3.0):
+            #     forward_nodes.append(node)
 
         sorted_inds = np.argsort(dists)
 
@@ -184,11 +212,11 @@ class RRTStar(object):
         """
         xtest = np.random.rand(self.plant.num_states)  # all uniform 0-1
         xtest[0] = xtest[0] * (self.xG[0] - self.x0[0]) + self.x0[0]
-        xtest[1] = xtest[1] * (2.0 - 0.3) + 0.3
+        xtest[1] = xtest[1] * (1.9 - 0.4) + 0.4
         xtest[2] = xtest[2] * (14.0 - 4.0) + 4.0
-        xtest[3] = xtest[3] * (16.0 * np.pi / 180.0) - 8.0 * np.pi / 180.0
-        xtest[4] = xtest[4] * (24.0 * np.pi / 180.0) - 4.0 * np.pi / 180.0
-        xtest[5] = xtest[5] * (36.0 * np.pi / 180.0) - 18.0 * np.pi / 180.0
+        xtest[3] = xtest[3] * (10.0 * np.pi / 180.0) - 5.0 * np.pi / 180.0
+        xtest[4] = xtest[4] * (14.0 * np.pi / 180.0) - 2.0 * np.pi / 180.0
+        xtest[5] = xtest[5] * (14.0 * np.pi / 180.0) - 7.0 * np.pi / 180.0
 
         if self.collision_free(np.array([xtest])):
             f = self.plant.airplaneLongDynamics(xtest, np.zeros(2))
@@ -215,26 +243,27 @@ class RRTStar(object):
             node = node.parent
         return total_cost
 
-    def reconstruct_path(self):
+    def reconstruct_path(self, node):
         """
-        Piece together trajectories between nodes in the path to goal.
+        Piece together trajectories between nodes in the path to selected node (generally self.best_goal_node).
         """
-        current = self.best_goal_node
+        current = node
 
-        utraj, xtraj, ttraj, res, cost= self.plant.trajOptRRT(current.parent.state, current.state, goal=True)
+        utraj, xtraj, ttraj, res, cost= self.plant.trajOptRRT(current.parent.state, current.state,
+                                                              goal=current.goal_node)
         urrt = utraj
         xrrt = xtraj
         trrt = ttraj
         current = current.parent
         while current.parent is not None:
-            utraj, xtraj, ttraj, res, cost = self.plant.trajOptRRT(current.parent.state, current.state, goal=False)
+            utraj, xtraj, ttraj, res, cost = self.plant.trajOptRRT(current.parent.state, current.state,
+                                                                   goal=current.goal_node)
             urrt = np.vstack((utraj, urrt))
             xrrt = np.vstack((xtraj[:-1, :], xrrt))
             trrt = np.hstack((ttraj[:-1], trrt + ttraj.max()))
             current = current.parent
 
         # save traj
-        # TODO: do something else - this is sloppy
         self.plant.udtraj = urrt
         self.plant.xdtraj = xrrt
         self.plant.ttraj = trrt

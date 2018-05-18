@@ -470,34 +470,25 @@ def animateMultipleTraj(plants, saveprefix=None):
 
 
 
-def rrtPlot(rrt):
+def rrtPlot(rrt, savefile=None):
     """
     This function plots the RRT* tree in the xz-plane, as well as the stabilized solution to the goal.
     """
-    plant = rrt.plant
 
     fig, ax = plt.subplots(figsize=(12, 3.2))
 
-    leaf_nodes = rrt.nodes[1:]
-    # trim non-leaf nodes
-    for node in rrt.nodes[1:]:
-        if node.parent is not None:
-            try:
-                leaf_nodes.remove(node.parent)
-            except ValueError:
-                pass
+    nodes = rrt.nodes[1:]
+    nodes.remove(rrt.best_goal_node)
 
-    leaf_nodes.remove(rrt.best_goal_node)
-
-    print 'leaf_nodes length: ', len(leaf_nodes)
-    for leaf in leaf_nodes:
-        urrt, xrrt, trrt = rrt.reconstruct_path(leaf)
+    for node in nodes:
+        urrt, xrrt, trrt, res_, cost_ = rrt.plant.trajOptRRT(node.parent.state, node.state,
+                                                             goal=node.goal_node, verbose=False)
         plt.plot(xrrt[:, 0], xrrt[:, 1], 'k')
-        plt.plot(leaf.state[0], leaf.state[1], 'o', mfc='orange')
+        plt.plot(node.state[0], node.state[1], 'o', mfc='orange')
 
     urrt, xrrt, trrt = rrt.reconstruct_path(rrt.best_goal_node)
     print 'total cost of RRT* path: ', rrt.sum_cost(rrt.best_goal_node)
-    plt.plot(rrt.best_goal_node.state[0], rrt.best_goal_node.state[1], 'gp', ms=16, alpha=0.5)
+    plt.plot(xrrt[-1,0], xrrt[-1,1], 'gp', ms=16, alpha=0.5)
     current = rrt.best_goal_node.parent
     while current.parent is not None:
         plt.plot(current.state[0], current.state[1], 'gp', ms=16, alpha=0.5)
@@ -511,7 +502,8 @@ def rrtPlot(rrt):
     plt.xlabel('x [m]')
     plt.ylabel('z [m]')
     plt.tight_layout()
-    # plt.savefig('figs/rrtstar_tree_2.png', dpi=300)
+    if savefile is not None:
+        plt.savefig(savefile, dpi=300)
     plt.show()
 
     return ax

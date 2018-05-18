@@ -22,7 +22,7 @@ class RRTStar(object):
         t_start = time.time()
 
         # number of iterations
-        N = 300
+        N = 350
 
         # root node
         start_node = Node(self.x0)
@@ -104,13 +104,18 @@ class RRTStar(object):
                                             replacement_node = Node(node.state, parent_node=new_node, cost=cost, goal_node=node.goal_node)
                                             self.nodes.remove(node)
                                             self.nodes.append(replacement_node)
-                                            # if node is a goal node, check whether new cost to it is lowest
-                                            if replacement_node.goal_node and new_cost < self.sum_cost(self.best_goal_node):
-                                                print 'better RRT* path to goal found (1)'
-                                                self.best_goal_node = replacement_node
 
                         # finally, add this node to the tree
                         self.nodes.append(new_node)
+
+                        # do a check to update the best goal node
+                        if self.best_goal_node is not None:
+                            best_cost = self.sum_cost(self.best_goal_node)
+                            for check in self.nodes:
+                                if check.goal_node and self.sum_cost(check) < best_cost:
+                                    print 'better RRT* path to goal found (1)'
+                                    self.best_goal_node = check
+                                    best_cost = self.sum_cost(self.best_goal_node)
 
                         # check whether this node can reach goal
                         utraj, xtraj, ttraj, res, cost = self.plant.trajOptRRT(x_rand, self.xG, goal=True)
@@ -124,6 +129,8 @@ class RRTStar(object):
                                     self.best_goal_node = goal_node
                                     print 'better RRT* path to goal found (2)'
                                 self.nodes.append(goal_node)
+
+
 
         t_finish = time.time()
         t_diff = t_finish - t_start
@@ -170,10 +177,6 @@ class RRTStar(object):
                 dist = euclid_dist * (np.cos(beta-gamma) + 5*np.sin(beta-gamma)**2)
                 dists.append(dist)
 
-            # if node.state[0] < (test_pt[0] - 3.0):
-            #     backward_nodes.append(node)
-            #     dists.append((node.state[0] - test_pt[0]) ** 2 + (node.state[1] - test_pt[1]) ** 2)
-
             # angle to horizontal from test_pt to node
             beta2 = np.pi + beta
 
@@ -184,9 +187,6 @@ class RRTStar(object):
             # angle between gamma and path to node should be small, horizontal dist should be greater than 3m
             if np.abs(beta2-gamma2) < (np.pi/6) and np.abs(node.state[0] - test_pt[0]) > 3.0:
                 forward_nodes.append(node)
-
-            # elif node.state[0] > (test_pt[0] + 3.0):
-            #     forward_nodes.append(node)
 
         sorted_inds = np.argsort(dists)
 

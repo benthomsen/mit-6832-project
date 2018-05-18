@@ -415,22 +415,22 @@ class AirplaneSystem(VectorSystem):
         # final state constraints
         if goal:
             # final state constraint (x position)
-            mp.AddLinearConstraint(state_trajectory[-1, 0] == state_final[0])
+            mp.AddLinearConstraint(state_trajectory[-1, 0] == 0.0)
 
             # final state constraint (z position) NOTE: range is acceptable
             mp.AddLinearConstraint(state_trajectory[-1, 1] <= 1.5)
             mp.AddLinearConstraint(state_trajectory[-1, 1] >= 0.5)
 
             # final state constraint (velocity) NOTE: range is acceptable
-            mp.AddLinearConstraint(state_trajectory[-1, 2] <= 1.5 * state_final[2])
-            mp.AddLinearConstraint(state_trajectory[-1, 2] >= state_final[2])
+            mp.AddLinearConstraint(state_trajectory[-1, 2] <= 9.0)
+            mp.AddLinearConstraint(state_trajectory[-1, 2] >= 6.0)
 
             # final state constraint (flight path angle) NOTE: small range here
-            mp.AddLinearConstraint(state_trajectory[-1, 3] <= state_final[3] + 1.0 * np.pi / 180.0)
-            mp.AddLinearConstraint(state_trajectory[-1, 3] >= state_final[3] - 1.0 * np.pi / 180.0)
+            mp.AddLinearConstraint(state_trajectory[-1, 3] <= 1.0 * np.pi / 180.0)
+            mp.AddLinearConstraint(state_trajectory[-1, 3] >= - 1.0 * np.pi / 180.0)
 
             # final state constraint (pitch rate)
-            mp.AddLinearConstraint(state_trajectory[-1, 5] == state_final[5])
+            mp.AddLinearConstraint(state_trajectory[-1, 5] == 0.0)
         else:
             for i in range(len(state_initial)):
                 mp.AddLinearConstraint(state_trajectory[-1, i] == state_final[i])
